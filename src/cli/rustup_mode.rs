@@ -6,7 +6,8 @@ use std::str::FromStr;
 use anyhow::{anyhow, Error, Result};
 use clap::{
     builder::{EnumValueParser, PossibleValue, PossibleValuesParser},
-    Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueEnum,
+    Arg, ArgAction, ArgGroup, ArgMatches, Command, FromArgMatches as _, Parser, Subcommand,
+    ValueEnum,
 };
 use clap_complete::Shell;
 use itertools::Itertools;
@@ -84,6 +85,63 @@ where
     callee(cfg, matches)
 }
 
+#[derive(Debug, Parser)]
+#[command(
+    name = "rustup",
+    bin_name = "rustup[EXE]",
+    version = common::version(),
+)]
+struct Rustup {
+    #[command(subcommand)]
+    subcmd: RustupSubcmd,
+}
+
+#[derive(Debug, Subcommand)]
+enum RustupSubcmd {
+    /// Show the active and installed toolchains or profiles
+    #[command(after_help = SHOW_HELP)]
+    Show {
+        /// Enable verbose output with rustc information for all installed toolchains
+        #[arg(short, long)]
+        verbose: bool,
+
+        #[command(subcommand)]
+        subcmd: Option<ShowSubcmd>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ShowSubcmd {
+    /// Show the active toolchain
+    #[command(after_help = SHOW_ACTIVE_TOOLCHAIN_HELP)]
+    ActiveToolchain {
+        /// Enable verbose output with rustc information
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Display the computed value of RUSTUP_HOME
+    Home,
+
+    /// Show the default profile used for the `rustup install` command
+    Profile,
+}
+
+impl Rustup {
+    fn dispatch(self, cfg: &mut Cfg) -> Result<utils::ExitCode> {
+        match self.subcmd {
+            RustupSubcmd::Show { verbose, subcmd } => match subcmd {
+                None => handle_epipe(show(cfg, verbose)),
+                Some(ShowSubcmd::ActiveToolchain { verbose }) => {
+                    handle_epipe(show_active_toolchain(cfg, verbose))
+                }
+                Some(ShowSubcmd::Home) => handle_epipe(show_rustup_home(cfg)),
+                Some(ShowSubcmd::Profile) => handle_epipe(show_profile(cfg)),
+            },
+        }
+    }
+}
+
 #[cfg_attr(feature = "otel", tracing::instrument(fields(args = format!("{:?}", process().args_os().collect::<Vec<_>>()))))]
 pub fn main() -> Result<utils::ExitCode> {
     self_update::cleanup_self_updater()?;
@@ -156,15 +214,7 @@ pub fn main() -> Result<utils::ExitCode> {
     Ok(match matches.subcommand() {
         Some(s) => match s {
             ("dump-testament", _) => common::dump_testament()?,
-            ("show", c) => match c.subcommand() {
-                Some(s) => match s {
-                    ("active-toolchain", m) => handle_epipe(show_active_toolchain(cfg, m))?,
-                    ("home", _) => handle_epipe(show_rustup_home(cfg))?,
-                    ("profile", _) => handle_epipe(show_profile(cfg))?,
-                    _ => handle_epipe(show(cfg, c))?,
-                },
-                None => handle_epipe(show(cfg, c))?,
-            },
+            ("show", _) => Rustup::from_arg_matches(&matches)?.dispatch(cfg)?,
             ("install", m) => deprecated("toolchain install", cfg, m, update)?,
             ("update", m) => update(cfg, m)?,
             ("check", _) => check_updates(cfg)?,
@@ -284,29 +334,11 @@ pub(crate) fn cli() -> Command {
             Command::new("dump-testament")
                 .about("Dump information about the build")
                 .hide(true), // Not for users, only CI
-        )
-        .subcommand(
-            Command::new("show")
-                .about("Show the active and installed toolchains or profiles")
-                .after_help(SHOW_HELP)
-                .arg(
-                    verbose_arg("Enable verbose output with rustc information for all installed toolchains"),
-                )
-                .subcommand(
-                    Command::new("active-toolchain")
-                        .about("Show the active toolchain")
-                        .after_help(SHOW_ACTIVE_TOOLCHAIN_HELP)
-                        .arg(
-                            verbose_arg("Enable verbose output with rustc information"),
-                        ),
-                )
-                .subcommand(
-                    Command::new("home")
-                        .about("Display the computed value of RUSTUP_HOME"),
-                )
-                .subcommand(Command::new("profile").about("Show the default profile used for the `rustup install` command"))
-        )
-        .subcommand(
+        );
+
+    app = RustupSubcmd::augment_subcommands(app);
+
+    app = app.subcommand(
             Command::new("install")
                 .about("Update Rust toolchains")
                 .after_help(INSTALL_HELP)
@@ -1052,10 +1084,8 @@ fn which(cfg: &Cfg, m: &ArgMatches) -> Result<utils::ExitCode> {
 }
 
 #[cfg_attr(feature = "otel", tracing::instrument(skip_all))]
-fn show(cfg: &Cfg, m: &ArgMatches) -> Result<utils::ExitCode> {
+fn show(cfg: &Cfg, verbose: bool) -> Result<utils::ExitCode> {
     common::warn_if_host_is_emulated();
-
-    let verbose = m.get_flag("verbose");
 
     // Print host triple
     {
@@ -1224,8 +1254,7 @@ fn show(cfg: &Cfg, m: &ArgMatches) -> Result<utils::ExitCode> {
 }
 
 #[cfg_attr(feature = "otel", tracing::instrument(skip_all))]
-fn show_active_toolchain(cfg: &Cfg, m: &ArgMatches) -> Result<utils::ExitCode> {
-    let verbose = m.get_flag("verbose");
+fn show_active_toolchain(cfg: &Cfg, verbose: bool) -> Result<utils::ExitCode> {
     let cwd = utils::current_dir()?;
     match cfg.find_or_install_override_toolchain_or_default(&cwd) {
         Err(e) => {
