@@ -456,11 +456,7 @@ pub(crate) fn cli() -> Command {
             Command::new("dump-testament")
                 .about("Dump information about the build")
                 .hide(true), // Not for users, only CI
-        );
-
-    app = RustupSubcmd::augment_subcommands(app);
-
-    app = app
+        )
         .subcommand(Command::new("check").about("Check for updates to Rust toolchains and rustup"))
         .subcommand(
             Command::new("default")
@@ -761,20 +757,21 @@ pub(crate) fn cli() -> Command {
                                 .default_value(SelfUpdateMode::default_mode()),
                         ),
                 ),
+        )
+        .subcommand(
+            Command::new("completions")
+                .about("Generate tab-completion scripts for your shell")
+                .after_help(COMPLETIONS_HELP)
+                .arg_required_else_help(true)
+                .arg(Arg::new("shell").value_parser(EnumValueParser::<Shell>::new()))
+                .arg(
+                    Arg::new("command")
+                        .value_parser(EnumValueParser::<CompletionCommand>::new())
+                        .default_missing_value("rustup"),
+                ),
         );
 
-    app.subcommand(
-        Command::new("completions")
-            .about("Generate tab-completion scripts for your shell")
-            .after_help(COMPLETIONS_HELP)
-            .arg_required_else_help(true)
-            .arg(Arg::new("shell").value_parser(EnumValueParser::<Shell>::new()))
-            .arg(
-                Arg::new("command")
-                    .value_parser(EnumValueParser::<CompletionCommand>::new())
-                    .default_missing_value("rustup"),
-            ),
-    )
+    RustupSubcmd::augment_subcommands(app)
 }
 
 fn verbose_arg(help: &'static str) -> Arg {
