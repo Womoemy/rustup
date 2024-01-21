@@ -36,10 +36,10 @@ use crate::{
     toolchain::{
         distributable::DistributableToolchain,
         names::{
-            custom_toolchain_name_parser, maybe_resolvable_toolchainame_parser,
-            partial_toolchain_desc_parser, resolvable_local_toolchainame_parser,
-            resolvable_toolchainame_parser, CustomToolchainName, MaybeResolvableToolchainName,
-            ResolvableLocalToolchainName, ResolvableToolchainName, ToolchainName,
+            maybe_resolvable_toolchainame_parser, partial_toolchain_desc_parser,
+            resolvable_local_toolchainame_parser, resolvable_toolchainame_parser,
+            CustomToolchainName, MaybeResolvableToolchainName, ResolvableLocalToolchainName,
+            ResolvableToolchainName, ToolchainName,
         },
         toolchain::Toolchain,
     },
