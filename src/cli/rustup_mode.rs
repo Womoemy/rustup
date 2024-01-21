@@ -1355,10 +1355,10 @@ fn explicit_desc_or_dir_toolchain_old<'a>(cfg: &'a Cfg, m: &ArgMatches) -> Resul
     explicit_or_dir_toolchain2(cfg, toolchain)
 }
 
-fn explicit_desc_or_dir_toolchain<'a>(
-    cfg: &'a Cfg,
+fn explicit_desc_or_dir_toolchain(
+    cfg: &Cfg,
     toolchain: Option<PartialToolchainDesc>,
-) -> Result<Toolchain<'a>> {
+) -> Result<Toolchain<'_>> {
     explicit_or_dir_toolchain2(cfg, toolchain.map(|it| (&it).into()))
 }
 
