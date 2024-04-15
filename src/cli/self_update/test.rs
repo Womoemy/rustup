@@ -8,6 +8,28 @@ use winreg::{
     RegKey, RegValue,
 };
 
+/// Support testing of code that mutates global state
+fn with_saved_global_state<S>(
+    getter: impl Fn() -> std::io::Result<Option<S>>,
+    setter: impl Fn(Option<S>),
+    f: &mut dyn FnMut(),
+) {
+    // Lock protects concurrent mutation of registry
+    static LOCK: Mutex<()> = Mutex::new(());
+    let _g = LOCK.lock();
+
+    // Save and restore the global state here to keep from trashing things.
+    let saved_state =
+        getter().expect("Error getting global state: Better abort to avoid trashing it");
+    let _g = scopeguard::guard(saved_state, setter);
+
+    f();
+}
+
+pub fn with_saved_path(f: &mut dyn FnMut()) {
+    with_saved_global_state(get_path, restore_path, f)
+}
+
 #[cfg(windows)]
 pub fn get_path() -> std::io::Result<Option<RegValue>> {
     let root = RegKey::predef(HKEY_CURRENT_USER);
@@ -21,6 +43,11 @@ pub fn get_path() -> std::io::Result<Option<RegValue>> {
     }
 }
 
+#[cfg(unix)]
+pub fn get_path() -> std::io::Result<Option<()>> {
+    Ok(None)
+}
+
 #[cfg(windows)]
 fn restore_path(p: Option<RegValue>) {
     let root = RegKey::predef(HKEY_CURRENT_USER);
@@ -32,25 +59,6 @@ fn restore_path(p: Option<RegValue>) {
     } else {
         let _ = environment.delete_value("PATH");
     }
-}
-
-/// Support testing of code that mutates global path state
-pub fn with_saved_path(f: &mut dyn FnMut()) {
-    // Lock protects concurrent mutation of registry
-    static LOCK: Mutex<()> = Mutex::new(());
-    let _g = LOCK.lock();
-
-    // On windows these tests mess with the user's PATH. Save
-    // and restore them here to keep from trashing things.
-    let saved_path = get_path().expect("Error getting PATH: Better abort to avoid trashing it.");
-    let _g = scopeguard::guard(saved_path, restore_path);
-
-    f();
-}
-
-#[cfg(unix)]
-pub fn get_path() -> std::io::Result<Option<()>> {
-    Ok(None)
 }
 
 #[cfg(unix)]
