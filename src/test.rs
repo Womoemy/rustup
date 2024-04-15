@@ -19,6 +19,9 @@ pub use crate::cli::self_update::test::{get_path, with_saved_path};
 use crate::currentprocess;
 use crate::dist::dist::TargetTriple;
 
+#[cfg(windows)]
+pub use crate::cli::self_update::test::with_saved_programs_display_version;
+
 // Things that can have environment variables applied to them.
 pub trait Env {
     fn env<K, V>(&mut self, key: K, val: V)

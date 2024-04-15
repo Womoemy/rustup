@@ -49,6 +49,18 @@ fn restore_path(p: Option<RegValue>) {
 fn restore_path(_: Option<()>) {}
 
 #[cfg(windows)]
+pub fn with_saved_programs_display_version(f: &mut dyn FnMut()) {
+    let root = &RegKey::predef(HKEY_CURRENT_USER);
+    let key = super::windows::RUSTUP_UNINSTALL_ENTRY;
+    let name = "DisplayVersion";
+    with_saved_global_state(
+        || get_reg_value(root, key, name),
+        |p| restore_reg_value(root, key, name, p),
+        f,
+    )
+}
+
+#[cfg(windows)]
 fn get_reg_value(root: &RegKey, subkey: &str, name: &str) -> io::Result<Option<RegValue>> {
     let subkey = root
         .open_subkey_with_flags(subkey, KEY_READ | KEY_WRITE)

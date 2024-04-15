@@ -498,7 +498,8 @@ pub(crate) fn do_remove_from_path() -> Result<()> {
     _apply_new_path(new_path)
 }
 
-const RUSTUP_UNINSTALL_ENTRY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Rustup";
+pub(super) const RUSTUP_UNINSTALL_ENTRY: &str =
+    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Rustup";
 
 fn rustup_uninstall_reg_key() -> Result<RegKey> {
     Ok(RegKey::predef(HKEY_CURRENT_USER)
