@@ -23,6 +23,9 @@ use rustup::utils::{raw, utils};
 use rustup::{for_host, DUP_TOOLS, TOOLS};
 use rustup_macros::integration_test as test;
 
+#[cfg(windows)]
+use rustup::test::with_saved_programs_display_version;
+
 const TEST_VERSION: &str = "1.1.1";
 
 pub fn update_setup(f: &dyn Fn(&mut Config, &Path)) {
@@ -304,7 +307,41 @@ info: downloading self-update
             &["rustup", "self", "update"],
             &format!("  rustup updated - {version} (from {version})\n\n",),
             &expected_output,
-        )
+        );
+    });
+}
+
+#[test]
+#[cfg(windows)]
+fn update_overwrites_programs_display_version() {
+    const RUSTUP_UNINSTALL_ENTRY: &str =
+        r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Rustup";
+
+    const PLACEHOLDER_VERSION: &str = "9.999.99";
+    let version = env!("CARGO_PKG_VERSION");
+
+    update_setup(&|config, _| {
+        with_saved_programs_display_version(&mut || {
+            config.expect_ok(&["rustup-init", "-y", "--no-modify-path"]);
+
+            winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+                .create_subkey(RUSTUP_UNINSTALL_ENTRY)
+                .unwrap()
+                .0
+                .set_value("DisplayVersion", &PLACEHOLDER_VERSION)
+                .unwrap();
+
+            config.expect_ok(&["rustup", "self", "update"]);
+
+            assert_eq!(
+                winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+                    .open_subkey(RUSTUP_UNINSTALL_ENTRY)
+                    .unwrap()
+                    .get_value::<String, _>("DisplayVersion")
+                    .unwrap(),
+                version,
+            );
+        });
     });
 }
 
