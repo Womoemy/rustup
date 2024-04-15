@@ -1,6 +1,6 @@
 //! Support for functional tests.
 
-use std::sync::Mutex;
+use std::{io, sync::Mutex};
 
 #[cfg(windows)]
 use winreg::{
@@ -10,7 +10,7 @@ use winreg::{
 
 /// Support testing of code that mutates global state
 fn with_saved_global_state<S>(
-    getter: impl Fn() -> std::io::Result<Option<S>>,
+    getter: impl Fn() -> io::Result<Option<S>>,
     setter: impl Fn(Option<S>),
     f: &mut dyn FnMut(),
 ) {
@@ -31,35 +31,43 @@ pub fn with_saved_path(f: &mut dyn FnMut()) {
 }
 
 #[cfg(windows)]
-pub fn get_path() -> std::io::Result<Option<RegValue>> {
-    let root = RegKey::predef(HKEY_CURRENT_USER);
-    let environment = root
-        .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)
+pub fn get_path() -> io::Result<Option<RegValue>> {
+    get_reg_value(&RegKey::predef(HKEY_CURRENT_USER), "Environment", "PATH")
+}
+
+#[cfg(unix)]
+pub fn get_path() -> io::Result<Option<()>> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+fn restore_path(p: Option<RegValue>) {
+    restore_reg_value(&RegKey::predef(HKEY_CURRENT_USER), "Environment", "PATH", p)
+}
+
+#[cfg(unix)]
+fn restore_path(_: Option<()>) {}
+
+#[cfg(windows)]
+fn get_reg_value(root: &RegKey, subkey: &str, name: &str) -> io::Result<Option<RegValue>> {
+    let subkey = root
+        .open_subkey_with_flags(subkey, KEY_READ | KEY_WRITE)
         .unwrap();
-    match environment.get_raw_value("PATH") {
+    match subkey.get_raw_value(name) {
         Ok(val) => Ok(Some(val)),
         Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
     }
 }
 
-#[cfg(unix)]
-pub fn get_path() -> std::io::Result<Option<()>> {
-    Ok(None)
-}
-
 #[cfg(windows)]
-fn restore_path(p: Option<RegValue>) {
-    let root = RegKey::predef(HKEY_CURRENT_USER);
+fn restore_reg_value(root: &RegKey, subkey: &str, name: &str, p: Option<RegValue>) {
     let environment = root
-        .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)
+        .open_subkey_with_flags(subkey, KEY_READ | KEY_WRITE)
         .unwrap();
     if let Some(p) = p.as_ref() {
-        environment.set_raw_value("PATH", p).unwrap();
+        environment.set_raw_value(name, p).unwrap();
     } else {
-        let _ = environment.delete_value("PATH");
+        let _ = environment.delete_value(name);
     }
 }
-
-#[cfg(unix)]
-fn restore_path(_: Option<()>) {}
